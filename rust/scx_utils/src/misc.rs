@@ -4,6 +4,14 @@ use scx_stats::prelude::*;
 use serde::Deserialize;
 use std::thread::sleep;
 use std::time::Duration;
+use lazy_static::lazy_static;
+
+lazy_static! {
+    static ref RETRYABLE_ERRORS: Vec<std::io::ErrorKind> = [
+        std::io::ErrorKind::NotFound,
+        std::io::ErrorKind::ConnectionRefused,
+    ].to_vec();
+}
 
 pub fn monitor_stats<T>(
     stats_args: &Vec<(String, String)>,
@@ -19,7 +27,7 @@ where
         let mut client = match StatsClient::new().connect() {
             Ok(v) => v,
             Err(e) => match e.downcast_ref::<std::io::Error>() {
-                Some(ioe) if ioe.kind() == std::io::ErrorKind::ConnectionRefused => {
+                Some(ioe) if RETRYABLE_ERRORS.contains(&ioe.kind()) => {
                     if retry_cnt == 1 {
                         info!("Stats server not avaliable, retrying...");
                     }
