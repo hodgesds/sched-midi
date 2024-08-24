@@ -7,6 +7,14 @@ use serde::Deserialize;
 use std::path::Path;
 use std::thread::sleep;
 use std::time::Duration;
+use lazy_static::lazy_static;
+
+lazy_static! {
+    static ref RETRYABLE_ERRORS: Vec<std::io::ErrorKind> = [
+        std::io::ErrorKind::NotFound,
+        std::io::ErrorKind::ConnectionRefused,
+    ].to_vec();
+}
 
 pub fn monitor_stats<T>(
     stats_args: &Vec<(String, String)>,
