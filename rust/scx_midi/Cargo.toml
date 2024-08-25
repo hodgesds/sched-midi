@@ -1,0 +1,12 @@
+[package]
+name = "scx_midi"
+version = "1.0.0"
+edition = "2021"
+authors = ["Daniel Hodges <hodges.daniel.scott@gmail.com>"]
+license = "GPL-2.0-only"
+repository = "https://github.com/hodgesds/scx-midi"
+description = "Utilities for sched_ext schedulers"
+
+[dependencies]
+midir = "0.10.0"
+
