@@ -10,7 +10,7 @@ scheduler. To interface with MIDI the schedulers use the [midir](https://github.
 ## Device Support
 I don't have a lot of MIDI devices, so I picked up a [APC Key 25](https://www.akaipro.com/apc-key-25-mkii) 
 for ~$100 USD. I chose this device because the MIDI interface was rather well
-[documentmented](https://cdn.inmusicbrands.com/akai/attachments/APC%20Key%2025%20mk2%20-%20Communication%20Protocol%20-%20v1.1.pdf)
+[documented](https://cdn.inmusicbrands.com/akai/attachments/APC%20Key%2025%20mk2%20-%20Communication%20Protocol%20-%20v1.1.pdf)
 and it had decent reviews. I'm by no means a DJ or music maker so everything is
 just for fun. The device has a nice RBG LED pad and 360 rotary encoders. I plan
 on adding support for tuning scheduling domains via the RGB matrix and rotary
