@@ -9,6 +9,7 @@ pub mod bpf_intf;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
+use std::collections::VecDeque;
 use std::ffi::CString;
 use std::fs;
 use std::io::Read;
@@ -18,6 +19,7 @@ use std::ops::Sub;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::thread::ThreadId;
 use std::time::Duration;
 use std::time::Instant;
@@ -30,6 +32,8 @@ use anyhow::Result;
 use bitvec::prelude::*;
 use clap::Parser;
 use crossbeam::channel::RecvTimeoutError;
+use crossbeam_channel::unbounded;
+use crossbeam_channel::{Receiver, Sender};
 use libbpf_rs::skel::OpenSkel;
 use libbpf_rs::skel::Skel;
 use libbpf_rs::skel::SkelBuilder;
@@ -40,6 +44,7 @@ use log::info;
 use log::trace;
 use log::warn;
 use midir::{Ignore, MidiInput, MidiInputConnection, MidiOutput, MidiOutputConnection};
+use scx_midi::prelude::*;
 use scx_stats::prelude::*;
 use scx_utils::compat;
 use scx_utils::init_libbpf_logging;
@@ -53,7 +58,6 @@ use scx_utils::Cache;
 use scx_utils::Core;
 use scx_utils::Topology;
 use scx_utils::UserExitInfo;
-use scx_midi::prelude::*;
 use serde::Deserialize;
 use serde::Serialize;
 use stats::LayerStats;
@@ -83,6 +87,8 @@ const GROWTH_ALGO_TOPO: i32 = bpf_intf::layer_growth_algo_TOPO as i32;
 const GROWTH_ALGO_ROUND_ROBIN: i32 = bpf_intf::layer_growth_algo_ROUND_ROBIN as i32;
 const GROWTH_ALGO_BIG_LITTLE: i32 = bpf_intf::layer_growth_algo_BIG_LITTLE as i32;
 const GROWTH_ALGO_LITTLE_BIG: i32 = bpf_intf::layer_growth_algo_LITTLE_BIG as i32;
+static mut MIDI_CHAN: Option<Mutex<Sender<&[u8]>>> = None;
+static mut MIDI_MSG: Mutex<VecDeque<Vec<u8>>> = Mutex::new(VecDeque::new());
 
 #[rustfmt::skip]
 lazy_static::lazy_static! {
@@ -404,6 +410,10 @@ struct Opts {
     /// Scheduling interval in seconds.
     #[clap(short = 'i', long, default_value = "0.1")]
     interval: f64,
+
+    /// MIDI poll interval in seconds.
+    #[clap(long, default_value = "0.01")]
+    midi_interval: f64,
 
     /// Disable load-fraction based max layer CPU limit. ***NOTE***
     /// load-fraction calculation is currently broken due to lack of
@@ -1667,12 +1677,22 @@ impl Layer {
     }
 }
 
+fn on_midi(message: &[u8]) {
+    unsafe {
+        // let tx = MIDI_CHAN.as_ref().unwrap().lock().unwrap().clone();
+        // tx.send(&message).unwrap();
+        let mut msg = MIDI_MSG.lock().unwrap();
+        msg.push_back(message.to_vec());
+    }
+}
+
 struct Scheduler<'a, 'b> {
     skel: BpfSkel<'a>,
     struct_ops: Option<libbpf_rs::Link>,
     layer_specs: &'b Vec<LayerSpec>,
 
     sched_intv: Duration,
+    midi_intv: Duration,
     no_load_frac_limit: bool,
 
     cpu_pool: CpuPool,
@@ -1684,7 +1704,7 @@ struct Scheduler<'a, 'b> {
     nr_layer_cpus_ranges: Vec<(usize, usize)>,
     processing_dur: Duration,
 
-    // midi_in: Option<MidiInputConnection<T>>,
+    midi_in: Option<MidiInputConnection<()>>,
     midi_out: Option<MidiOutputConnection>,
 
     stats_server: StatsServer<StatsReq, StatsRes>,
@@ -1877,6 +1897,7 @@ impl<'a, 'b> Scheduler<'a, 'b> {
         layer_specs: &'b Vec<LayerSpec>,
         open_object: &'a mut MaybeUninit<OpenObject>,
         midi_port: Option<String>,
+        rx: Receiver<&[u8]>,
     ) -> Result<Self> {
         let nr_layers = layer_specs.len();
         let topo = Topology::new()?;
@@ -1947,6 +1968,7 @@ impl<'a, 'b> Scheduler<'a, 'b> {
             layer_specs,
 
             sched_intv: Duration::from_secs_f64(opts.interval),
+            midi_intv: Duration::from_secs_f64(opts.midi_interval),
             no_load_frac_limit: opts.no_load_frac_limit,
 
             cpu_pool,
@@ -1960,7 +1982,7 @@ impl<'a, 'b> Scheduler<'a, 'b> {
             proc_reader,
             skel,
 
-            // midi_in: None,
+            midi_in: None,
             midi_out: None,
 
             stats_server,
@@ -1972,25 +1994,24 @@ impl<'a, 'b> Scheduler<'a, 'b> {
             midi_in.ignore(Ignore::None);
             let midi_out = MidiOutput::new("midir test output")?;
 
-            // for (i, p) in midi_in.ports().iter().enumerate() {
-            //     let iter_port = &midi_in.port_name(p)?;
-            //     if iter_port.to_string() == port {
-            //         port_idx = i;
-            //     }
-            // }
+            for (i, p) in midi_in.ports().iter().enumerate() {
+                let iter_port = &midi_in.port_name(p)?;
+                if iter_port.to_string() == port {
+                    port_idx = i;
+                }
+            }
 
-            // let in_port = &midi_in.ports()[port_idx];
-            // let midi_conn_in: MidiInputConnection<()> = midi_in.connect(
-            //     in_port,
-            //     "midir-read-input",
-
-	    //     move |stamp, message, _| {
-            //         sched.on_midi_input(stamp, message)
-            //     },
-            //     (),
-            // ).unwrap();
-            // info!("Connected to MIDI input port {}", port_idx);
-            // sched.midi_in = Some(midi_conn_in);
+            let in_port = &midi_in.ports()[port_idx];
+            let midi_conn_in: MidiInputConnection<()> = midi_in
+                .connect(
+                    in_port,
+                    "midir-read-input",
+                    |_stamp, message, _| on_midi(message),
+                    (),
+                )
+                .unwrap();
+            info!("Connected to MIDI input port {}", port_idx);
+            sched.midi_in = Some(midi_conn_in);
 
             for (i, p) in midi_out.ports().iter().enumerate() {
                 let iter_port = &midi_out.port_name(p)?;
@@ -2001,7 +2022,7 @@ impl<'a, 'b> Scheduler<'a, 'b> {
             }
 
             let out_port = &midi_out.ports()[port_idx];
-            let mut conn = midi_out.connect(out_port, "midir-test").unwrap();
+            let conn = midi_out.connect(out_port, "midir-test").unwrap();
             sched.midi_out = Some(conn);
             info!("Connected to MIDI output port {}", port_idx);
         };
@@ -2011,7 +2032,29 @@ impl<'a, 'b> Scheduler<'a, 'b> {
         Ok(sched)
     }
 
-    fn on_midi_input(&mut self, timestamp: u64, data: &[u8]) {
+    fn on_midi_input(&mut self) {
+        let mut buf = VecDeque::new();
+        unsafe {
+            let mut msg = MIDI_MSG.lock().unwrap();
+            buf = msg.drain(..).collect::<VecDeque<_>>();
+        }
+
+        let num_layers = self.layers.len();
+
+        for msg in buf.iter() {
+            info!("got msg: {:?}", msg);
+        }
+        // for idx in 0..num_layers {
+        //     match self.layers[idx].kind {
+        //         LayerKind::Confined { .. }
+        //         | LayerKind::Grouped { .. }
+        //         | LayerKind::Open { .. } => {
+        //             // let layer = &self.layers[idx];
+        //             let mut layer = &mut self.skel.maps.bss_data.layers[idx];
+        //             layer.slice_ns =
+        //         }
+        //     }
+        // }
     }
 
     fn update_bpf_layer_cpumask(layer: &Layer, bpf_layer: &mut types::layer) {
@@ -2133,17 +2176,17 @@ impl<'a, 'b> Scheduler<'a, 'b> {
     }
 
     fn update_midi_stats(&mut self, stats: &Stats) {
-        let mut set_led = |led: u8, color: u8, behavoir: u8 | {
+        let mut set_led = |led: u8, color: u8, behavoir: u8| {
             if let Some(midi_out) = &mut self.midi_out {
                 match midi_out.send(&[behavoir, led, color]) {
                     Err(e) => {
-                         warn!("{}", format!("error: {}", e));
-                         return;
-                     }
-                     _ => return,
+                        warn!("{}", format!("error: {}", e));
+                        return;
+                    }
+                    _ => return,
                 }
             }
-         };
+        };
 
         // first clear cpu row
         for col in 0..8 {
@@ -2172,7 +2215,7 @@ impl<'a, 'b> Scheduler<'a, 'b> {
                 0x05
             } else if layer_load < high_load && layer_load >= avg_load {
                 0x0D
-            } else if layer_load < avg_load && layer_load >= low_load{
+            } else if layer_load < avg_load && layer_load >= low_load {
                 0x12
             } else {
                 0x45
@@ -2182,13 +2225,13 @@ impl<'a, 'b> Scheduler<'a, 'b> {
             let migrations = stats.bpf_stats.lstats[i][LSTAT_MIGRATION];
             let action = if migrations == 0 {
                 LED_VEL_100_PCT_BRIGHT
-            } else if migrations > 0 && migrations < (1<<2) {
+            } else if migrations > 0 && migrations < (1 << 2) {
                 LED_VEL_BLINK_1_2
-            } else if migrations >= (1<<2) && migrations < (2<<2) {
+            } else if migrations >= (1 << 2) && migrations < (2 << 2) {
                 LED_VEL_BLINK_1_4
-            } else if migrations >= (2<<2) && migrations < (3<<2) {
+            } else if migrations >= (2 << 2) && migrations < (3 << 2) {
                 LED_VEL_BLINK_1_8
-            } else if migrations >= (3<<2) && migrations < (4<<4) {
+            } else if migrations >= (3 << 2) && migrations < (4 << 4) {
                 LED_VEL_BLINK_1_16
             } else {
                 LED_VEL_BLINK_1_24
@@ -2211,25 +2254,22 @@ impl<'a, 'b> Scheduler<'a, 'b> {
             let yields = stats.bpf_stats.lstats[i][LSTAT_YIELD];
             let action = if yields == 0 {
                 LED_VEL_100_PCT_BRIGHT
-            } else if yields > 0 && yields < (1<<2) {
+            } else if yields > 0 && yields < (1 << 2) {
                 LED_VEL_BLINK_1_2
-            } else if yields >= (1<<2) && yields < (2<<2) {
+            } else if yields >= (1 << 2) && yields < (2 << 2) {
                 LED_VEL_BLINK_1_4
-            } else if yields >= (2<<2) && yields < (3<<2) {
+            } else if yields >= (2 << 2) && yields < (3 << 2) {
                 LED_VEL_BLINK_1_8
-            } else if yields >= (3<<2) && yields < (4<<4) {
+            } else if yields >= (3 << 2) && yields < (4 << 4) {
                 LED_VEL_BLINK_1_16
             } else {
                 LED_VEL_BLINK_1_24
             };
 
-            set_led(PAD_MATRIX[row_idx+2][col_idx], color, action);
+            set_led(PAD_MATRIX[row_idx + 2][col_idx], color, action);
             nr_cpus += self.layers[i].nr_cpus;
 
             col_idx += 1;
-            // set_led(0x20, 0x19, LED_VEL_BLINK_1_24);
-            // set_led(0x21, 0x20, LED_VEL_BLINK_1_24);
-            // set_led(0x22, 0x26, LED_VEL_BLINK_1_24);
         }
         let norm_cpus = ((nr_cpus as f64 / *NR_POSSIBLE_CPUS as f64) * 8 as f64) as usize;
         info!("norm_cpus: {}", norm_cpus);
@@ -2248,16 +2288,23 @@ impl<'a, 'b> Scheduler<'a, 'b> {
         for i in 0..norm_cpus {
             set_led(PAD_MATRIX[4][i], cpus_color, LED_VEL_100_PCT_BRIGHT);
         }
-
     }
 
     fn run(&mut self, shutdown: Arc<AtomicBool>) -> Result<UserExitInfo> {
         let (res_ch, req_ch) = self.stats_server.channels();
         let mut next_sched_at = Instant::now() + self.sched_intv;
+        let mut next_midi_at = Instant::now() + self.midi_intv;
         let mut cpus_ranges = HashMap::<ThreadId, Vec<(usize, usize)>>::new();
 
         while !shutdown.load(Ordering::Relaxed) && !uei_exited!(&self.skel, uei) {
             let now = Instant::now();
+
+            if now >= next_midi_at {
+                self.on_midi_input();
+                while next_midi_at < now {
+                    next_midi_at += self.midi_intv;
+                }
+            }
 
             if now >= next_sched_at {
                 self.step()?;
@@ -2458,7 +2505,6 @@ fn main() -> Result<()> {
     //     loop{}
     //     drop(_conn_in);
 
-
     //     info!("\nAvailable output ports:");
     //     for (i, p) in midi_out.ports().iter().enumerate() {
     //         let iter_port = &midi_out.port_name(p)?;
@@ -2495,7 +2541,6 @@ fn main() -> Result<()> {
     //         set_led(0x26, 0x09, LED_VEL_BLINK_1_24);
     //         set_led(0x27, 0x51, LED_VEL_BLINK_1_24);
     //     }
-
 
     //     // std::io::stdout().flush()?;
     //     // input.clear();
@@ -2583,10 +2628,20 @@ fn main() -> Result<()> {
             }
         }
     }
+    let (tx, rx): (Sender<&[u8]>, Receiver<&[u8]>) = unbounded();
+    unsafe {
+        MIDI_CHAN = Some(Mutex::new(tx));
+    }
 
     let mut open_object = MaybeUninit::uninit();
     loop {
-        let mut sched = Scheduler::init(&opts, &layer_config.specs, &mut open_object, opts.midi_port.clone())?;
+        let mut sched = Scheduler::init(
+            &opts,
+            &layer_config.specs,
+            &mut open_object,
+            opts.midi_port.clone(),
+            rx.clone(),
+        )?;
         if !sched.run(shutdown.clone())?.should_restart() {
             break;
         }
