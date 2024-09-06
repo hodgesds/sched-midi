@@ -89,6 +89,7 @@ const GROWTH_ALGO_BIG_LITTLE: i32 = bpf_intf::layer_growth_algo_BIG_LITTLE as i3
 const GROWTH_ALGO_LITTLE_BIG: i32 = bpf_intf::layer_growth_algo_LITTLE_BIG as i32;
 static mut MIDI_CHAN: Option<Mutex<Sender<&[u8]>>> = None;
 static mut MIDI_MSG: Mutex<VecDeque<Vec<u8>>> = Mutex::new(VecDeque::new());
+static mut PERF_CONTROL: Mutex<bool> = Mutex::new(false);
 
 #[rustfmt::skip]
 lazy_static::lazy_static! {
@@ -2042,93 +2043,168 @@ impl<'a, 'b> Scheduler<'a, 'b> {
         let num_layers = self.layers.len();
 
         for msg in buf.iter() {
-            if msg[0] != 0xB0 {
-                continue;
+            info!("msg: {:?}", msg);
+            if msg[0] == 0x90 && msg[1] == 0x52 && msg[2] == 0x7F {
+                unsafe {
+                    let mut perf = PERF_CONTROL.lock().unwrap();
+                    *perf = !*perf;
+                }
+                info!("set perf");
+            }
+            let mut is_perf = false;
+            unsafe {
+                let perf = PERF_CONTROL.lock().unwrap();
+                is_perf = *perf;
             }
             let offset = if msg[2] < 10 {
                 100000 * msg[2] as i32
             } else {
                 -100000 * (128 - msg[2] as i32)
             };
+            let perf_offset: i32 = if msg[2] < 10 { 10 } else { -10 };
 
             // rotary encoder match
             match msg[1] {
                 0x30 => {
                     let mut layer = &mut self.skel.maps.bss_data.layers[0];
-                    if layer.slice_ns + offset as u64 >= 500 {
-                        layer.slice_ns += offset as u64;
+                    if is_perf {
+                        let new_perf = layer.perf as i32 + perf_offset;
+                        if new_perf > 0 && new_perf < 1024 {
+                            layer.perf = new_perf as u32;
+                        }
+                        info!("layer 0 perf: {:?}", layer.perf);
+                    } else {
+                        if layer.slice_ns + offset as u64 >= 500 {
+                            layer.slice_ns += offset as u64;
+                        }
+                        info!("layer 1 timeslice: {:?}", layer.slice_ns);
                     }
-                    info!("layer 1 timeslice: {:?}", layer.slice_ns);
                 }
                 0x31 => {
-                    if num_layers <= 2 {
+                    if num_layers <= 1 {
                         continue;
                     }
                     let mut layer = &mut self.skel.maps.bss_data.layers[1];
-                    if layer.slice_ns + offset as u64 >= 500 {
-                        layer.slice_ns += offset as u64;
+                    if is_perf {
+                        let new_perf = layer.perf as i32 + perf_offset;
+                        if new_perf > 0 && new_perf < 1024 {
+                            layer.perf = new_perf as u32;
+                        }
+                        info!("layer 1 perf: {:?}", layer.perf);
+                    } else {
+                        if layer.slice_ns + offset as u64 >= 500 {
+                            layer.slice_ns += offset as u64;
+                        }
+                        info!("layer 2 timeslice: {:?}", layer.slice_ns);
                     }
-                    info!("layer 2 timeslice: {:?}", layer.slice_ns);
                 }
                 0x32 => {
-                    if num_layers <= 3 {
+                    if num_layers <= 2 {
                         continue;
                     }
                     let mut layer = &mut self.skel.maps.bss_data.layers[2];
-                    if layer.slice_ns + offset as u64 >= 500 {
-                        layer.slice_ns += offset as u64;
+                    if is_perf {
+                        let new_perf = layer.perf as i32 + perf_offset;
+                        if new_perf > 0 && new_perf < 1024 {
+                            layer.perf = new_perf as u32;
+                        }
+                        info!("layer 2 perf: {:?}", layer.perf);
+                    } else {
+                        if layer.slice_ns + offset as u64 >= 500 {
+                            layer.slice_ns += offset as u64;
+                        }
+                        info!("layer 3 timeslice: {:?}", layer.slice_ns);
                     }
-                    info!("layer 3 timeslice: {:?}", layer.slice_ns);
                 }
                 0x33 => {
-                    if num_layers <= 4 {
+                    if num_layers <= 3 {
                         continue;
                     }
                     let mut layer = &mut self.skel.maps.bss_data.layers[3];
-                    if layer.slice_ns + offset as u64 >= 500 {
-                        layer.slice_ns += offset as u64;
+                    if is_perf {
+                        let new_perf = layer.perf as i32 + perf_offset;
+                        if new_perf > 0 && new_perf < 1024 {
+                            layer.perf = new_perf as u32;
+                        }
+                        info!("layer 4 perf: {:?}", layer.perf);
+                    } else {
+                        if layer.slice_ns + offset as u64 >= 500 {
+                            layer.slice_ns += offset as u64;
+                        }
+                        info!("layer 4 timeslice: {:?}", layer.slice_ns);
                     }
-                    info!("layer 4 timeslice: {:?}", layer.slice_ns);
                 }
                 0x34 => {
-                    if num_layers <= 5 {
+                    if num_layers <= 4 {
                         continue;
                     }
                     let mut layer = &mut self.skel.maps.bss_data.layers[4];
-                    if layer.slice_ns + offset as u64 >= 500 {
-                        layer.slice_ns += offset as u64;
+                    if is_perf {
+                        let new_perf = layer.perf as i32 + perf_offset;
+                        if new_perf > 0 && new_perf < 1024 {
+                            layer.perf = new_perf as u32;
+                        }
+                        info!("layer 5 perf: {:?}", layer.perf);
+                    } else {
+                        if layer.slice_ns + offset as u64 >= 500 {
+                            layer.slice_ns += offset as u64;
+                        }
+                        info!("layer 5 timeslice: {:?}", layer.slice_ns);
                     }
-                    info!("layer 5 timeslice: {:?}", layer.slice_ns);
                 }
                 0x35 => {
-                    if num_layers <= 6 {
+                    if num_layers <= 5 {
                         continue;
                     }
                     let mut layer = &mut self.skel.maps.bss_data.layers[5];
-                    if layer.slice_ns + offset as u64 >= 500 {
-                        layer.slice_ns += offset as u64;
+                    if is_perf {
+                        let new_perf = layer.perf as i32 + perf_offset;
+                        if new_perf > 0 && new_perf < 1024 {
+                            layer.perf = new_perf as u32;
+                        }
+                        info!("layer 6 perf: {:?}", layer.perf);
+                    } else {
+                        if layer.slice_ns + offset as u64 >= 500 {
+                            layer.slice_ns += offset as u64;
+                        }
+                        info!("layer 6 timeslice: {:?}", layer.slice_ns);
                     }
-                    info!("layer 6 timeslice: {:?}", layer.slice_ns);
                 }
                 0x36 => {
-                    if num_layers <= 7 {
+                    if num_layers <= 6 {
                         continue;
                     }
                     let mut layer = &mut self.skel.maps.bss_data.layers[6];
-                    if layer.slice_ns + offset as u64 >= 500 {
-                        layer.slice_ns += offset as u64;
+                    if is_perf {
+                        let new_perf = layer.perf as i32 + perf_offset;
+                        if new_perf > 0 && new_perf < 1024 {
+                            layer.perf = new_perf as u32;
+                        }
+                        info!("layer 7 perf: {:?}", layer.perf);
+                    } else {
+                        if layer.slice_ns + offset as u64 >= 500 {
+                            layer.slice_ns += offset as u64;
+                        }
+                        info!("layer 7 timeslice: {:?}", layer.slice_ns);
                     }
-                    info!("layer 7 timeslice: {:?}", layer.slice_ns);
                 }
                 0x37 => {
-                    if num_layers <= 8 {
+                    if num_layers <= 7 {
                         continue;
                     }
                     let mut layer = &mut self.skel.maps.bss_data.layers[7];
-                    if layer.slice_ns + offset as u64 >= 500 {
-                        layer.slice_ns += offset as u64;
+                    if is_perf {
+                        let new_perf = layer.perf as i32 + perf_offset;
+                        if new_perf > 0 && new_perf < 1024 {
+                            layer.perf = new_perf as u32;
+                        }
+                        info!("layer 8 perf: {:?}", layer.perf);
+                    } else {
+                        if layer.slice_ns + offset as u64 >= 500 {
+                            layer.slice_ns += offset as u64;
+                        }
+                        info!("layer 8 timeslice: {:?}", layer.slice_ns);
                     }
-                    info!("layer 8 timeslice: {:?}", layer.slice_ns);
                 }
                 _ => {}
             }
