@@ -2042,7 +2042,96 @@ impl<'a, 'b> Scheduler<'a, 'b> {
         let num_layers = self.layers.len();
 
         for msg in buf.iter() {
-            info!("got msg: {:?}", msg);
+            if msg[0] != 0xB0 {
+                continue;
+            }
+            let offset = if msg[2] < 10 {
+                100000 * msg[2] as i32
+            } else {
+                -100000 * (128 - msg[2] as i32)
+            };
+
+            // rotary encoder match
+            match msg[1] {
+                0x30 => {
+                    let mut layer = &mut self.skel.maps.bss_data.layers[0];
+                    if layer.slice_ns + offset as u64 >= 500 {
+                        layer.slice_ns += offset as u64;
+                    }
+                    info!("layer 1 timeslice: {:?}", layer.slice_ns);
+                }
+                0x31 => {
+                    if num_layers <= 2 {
+                        continue;
+                    }
+                    let mut layer = &mut self.skel.maps.bss_data.layers[1];
+                    if layer.slice_ns + offset as u64 >= 500 {
+                        layer.slice_ns += offset as u64;
+                    }
+                    info!("layer 2 timeslice: {:?}", layer.slice_ns);
+                }
+                0x32 => {
+                    if num_layers <= 3 {
+                        continue;
+                    }
+                    let mut layer = &mut self.skel.maps.bss_data.layers[2];
+                    if layer.slice_ns + offset as u64 >= 500 {
+                        layer.slice_ns += offset as u64;
+                    }
+                    info!("layer 3 timeslice: {:?}", layer.slice_ns);
+                }
+                0x33 => {
+                    if num_layers <= 4 {
+                        continue;
+                    }
+                    let mut layer = &mut self.skel.maps.bss_data.layers[3];
+                    if layer.slice_ns + offset as u64 >= 500 {
+                        layer.slice_ns += offset as u64;
+                    }
+                    info!("layer 4 timeslice: {:?}", layer.slice_ns);
+                }
+                0x34 => {
+                    if num_layers <= 5 {
+                        continue;
+                    }
+                    let mut layer = &mut self.skel.maps.bss_data.layers[4];
+                    if layer.slice_ns + offset as u64 >= 500 {
+                        layer.slice_ns += offset as u64;
+                    }
+                    info!("layer 5 timeslice: {:?}", layer.slice_ns);
+                }
+                0x35 => {
+                    if num_layers <= 6 {
+                        continue;
+                    }
+                    let mut layer = &mut self.skel.maps.bss_data.layers[5];
+                    if layer.slice_ns + offset as u64 >= 500 {
+                        layer.slice_ns += offset as u64;
+                    }
+                    info!("layer 6 timeslice: {:?}", layer.slice_ns);
+                }
+                0x36 => {
+                    if num_layers <= 7 {
+                        continue;
+                    }
+                    let mut layer = &mut self.skel.maps.bss_data.layers[6];
+                    if layer.slice_ns + offset as u64 >= 500 {
+                        layer.slice_ns += offset as u64;
+                    }
+                    info!("layer 7 timeslice: {:?}", layer.slice_ns);
+                }
+                0x37 => {
+                    if num_layers <= 8 {
+                        continue;
+                    }
+                    let mut layer = &mut self.skel.maps.bss_data.layers[7];
+                    if layer.slice_ns + offset as u64 >= 500 {
+                        layer.slice_ns += offset as u64;
+                    }
+                    info!("layer 8 timeslice: {:?}", layer.slice_ns);
+                }
+                _ => {}
+            }
         }
         // for idx in 0..num_layers {
         //     match self.layers[idx].kind {
