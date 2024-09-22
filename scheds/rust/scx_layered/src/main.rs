@@ -2062,8 +2062,113 @@ impl<'a, 'b> Scheduler<'a, 'b> {
                 -100000 * (128 - msg[2] as i32)
             };
             let perf_offset: i32 = if msg[2] < 10 { 10 } else { -10 };
+            let msg2 = msg.clone();
+
+            // matrix layer first 2 rows match
+            match msg2[..] {
+                // first layer
+                [0x90, 0x20, 0x7F] => {
+                    let mut layer = &mut self.skel.maps.bss_data.layers[0];
+                    unsafe {
+                        layer.preempt.write(!layer.preempt.assume_init());
+                    }
+                }
+                [0x90, 0x21, 0x7F] => {
+                    let mut layer = &mut self.skel.maps.bss_data.layers[1];
+                    unsafe {
+                        layer.preempt.write(!layer.preempt.assume_init());
+                    }
+                }
+                [0x90, 0x22, 0x7F] => {
+                    let mut layer = &mut self.skel.maps.bss_data.layers[2];
+                    unsafe {
+                        layer.preempt.write(!layer.preempt.assume_init());
+                    }
+                }
+                [0x90, 0x23, 0x7F] => {
+                    let mut layer = &mut self.skel.maps.bss_data.layers[3];
+                    unsafe {
+                        layer.preempt.write(!layer.preempt.assume_init());
+                    }
+                }
+                [0x90, 0x24, 0x7F] => {
+                    let mut layer = &mut self.skel.maps.bss_data.layers[4];
+                    unsafe {
+                        layer.preempt.write(!layer.preempt.assume_init());
+                    }
+                }
+                [0x90, 0x25, 0x7F] => {
+                    let mut layer = &mut self.skel.maps.bss_data.layers[5];
+                    unsafe {
+                        layer.preempt.write(!layer.preempt.assume_init());
+                    }
+                }
+                [0x90, 0x26, 0x7F] => {
+                    let mut layer = &mut self.skel.maps.bss_data.layers[6];
+                    unsafe {
+                        layer.preempt.write(!layer.preempt.assume_init());
+                    }
+                }
+                [0x90, 0x27, 0x7F] => {
+                    let mut layer = &mut self.skel.maps.bss_data.layers[7];
+                    unsafe {
+                        layer.preempt.write(!layer.preempt.assume_init());
+                    }
+                }
+                // second row
+                [0x90, 0x18, 0x7F] => {
+                    let mut layer = &mut self.skel.maps.bss_data.layers[8];
+                    unsafe {
+                        layer.preempt.write(!layer.preempt.assume_init());
+                    }
+                }
+                [0x90, 0x19, 0x7F] => {
+                    let mut layer = &mut self.skel.maps.bss_data.layers[9];
+                    unsafe {
+                        layer.preempt.write(!layer.preempt.assume_init());
+                    }
+                }
+                [0x90, 0x1A, 0x7F] => {
+                    let mut layer = &mut self.skel.maps.bss_data.layers[10];
+                    unsafe {
+                        layer.preempt.write(!layer.preempt.assume_init());
+                    }
+                }
+                [0x90, 0x1B, 0x7F] => {
+                    let mut layer = &mut self.skel.maps.bss_data.layers[11];
+                    unsafe {
+                        layer.preempt.write(!layer.preempt.assume_init());
+                    }
+                }
+                [0x90, 0x1C, 0x7F] => {
+                    let mut layer = &mut self.skel.maps.bss_data.layers[12];
+                    unsafe {
+                        layer.preempt.write(!layer.preempt.assume_init());
+                    }
+                }
+                [0x90, 0x1D, 0x7F] => {
+                    let mut layer = &mut self.skel.maps.bss_data.layers[13];
+                    unsafe {
+                        layer.preempt.write(!layer.preempt.assume_init());
+                    }
+                }
+                [0x90, 0x1E, 0x7F] => {
+                    let mut layer = &mut self.skel.maps.bss_data.layers[14];
+                    unsafe {
+                        layer.preempt.write(!layer.preempt.assume_init());
+                    }
+                }
+                [0x90, 0x1F, 0x7F] => {
+                    let mut layer = &mut self.skel.maps.bss_data.layers[15];
+                    unsafe {
+                        layer.preempt.write(!layer.preempt.assume_init());
+                    }
+                }
+                _ => {}
+            }
 
             // rotary encoder match
+            // TODO: convert to slice pattern
             match msg[1] {
                 0x30 => {
                     let mut layer = &mut self.skel.maps.bss_data.layers[0];
