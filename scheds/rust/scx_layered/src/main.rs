@@ -2314,17 +2314,6 @@ impl<'a, 'b> Scheduler<'a, 'b> {
                 _ => {}
             }
         }
-        // for idx in 0..num_layers {
-        //     match self.layers[idx].kind {
-        //         LayerKind::Confined { .. }
-        //         | LayerKind::Grouped { .. }
-        //         | LayerKind::Open { .. } => {
-        //             // let layer = &self.layers[idx];
-        //             let mut layer = &mut self.skel.maps.bss_data.layers[idx];
-        //             layer.slice_ns =
-        //         }
-        //     }
-        // }
     }
 
     fn update_bpf_layer_cpumask(layer: &Layer, bpf_layer: &mut types::layer) {
