@@ -1216,7 +1216,7 @@ fn on_midi(message: &[u8]) {
     }
 }
 
-struct Scheduler<'a, 'b> {
+struct Scheduler<'a> {
     skel: BpfSkel<'a>,
     struct_ops: Option<libbpf_rs::Link>,
     layer_specs: Vec<LayerSpec>,
@@ -2534,7 +2534,7 @@ fn main() -> Result<()> {
 
     // If disabling topology awareness clear out any set NUMA/LLC configs and
     // it will fallback to using all cores.
-    if opts.disable_topology {
+    if opts.disable_topology.expect("foo") {
         info!("Disabling topology awareness");
         for i in 0..layer_config.specs.len() {
             let kind = &mut layer_config.specs[i].kind;
